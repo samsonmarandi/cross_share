@@ -10,10 +10,11 @@ import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
 
 import '../models/device_model.dart';
-import 'web_portal.dart';
-import '../utils/file_metadata.dart';
 import '../models/share_file_model.dart';
 import '../models/transfer_progress.dart';
+import '../utils/file_metadata.dart';
+import 'pairing_service.dart';
+import 'web_portal.dart';
 
 typedef OnTransferRequestCallback =
     Future<bool> Function(TransferProgress progress);
@@ -42,6 +43,7 @@ class HttpServerService {
   OnFileReceivedCallback? onFileReceived;
   OnProgressUpdateCallback? onProgressUpdate;
 
+  PairingService? pairingService;
   late DeviceModel currentDevice;
   final List<ShareFileModel> _webSharedFiles = [];
   String? customDownloadPath;
@@ -73,7 +75,60 @@ class HttpServerService {
       );
     });
 
-    // 2. Prepare/Request Endpoint
+    // 2. Pair Code Handshake Endpoint
+    appRouter.post('/api/pair', (Request request) async {
+      try {
+        final bodyText = await request.readAsString();
+        final json = jsonDecode(bodyText) as Map<String, dynamic>;
+
+        final pairCode = json['pairCode'] as String? ?? '';
+        final peerDeviceId = json['deviceId'] as String? ?? '';
+        final peerAlias = json['alias'] as String? ?? '';
+        final peerDeviceType = json['deviceType'] as String? ?? 'unknown';
+
+        if (pairingService == null) {
+          return Response.internalServerError(
+            body: jsonEncode({'error': 'Pairing service unavailable'}),
+          );
+        }
+
+        final pairedDevice = await pairingService!.handlePairingRequest(
+          pairCode: pairCode,
+          peerDeviceId: peerDeviceId,
+          peerAlias: peerAlias,
+          peerDeviceType: peerDeviceType,
+        );
+
+        if (pairedDevice != null) {
+          return Response.ok(
+            jsonEncode({
+              'status': 'success',
+              'authToken': pairedDevice.authToken,
+              'deviceId': currentDevice.id,
+              'alias': currentDevice.alias,
+              'deviceType': currentDevice.deviceType,
+            }),
+            headers: {'content-type': 'application/json'},
+          );
+        } else {
+          return Response(
+            401,
+            body: jsonEncode({
+              'status': 'error',
+              'message': 'Invalid or expired pair code',
+            }),
+            headers: {'content-type': 'application/json'},
+          );
+        }
+      } catch (e) {
+        return Response.internalServerError(
+          body: jsonEncode({'error': e.toString()}),
+          headers: {'content-type': 'application/json'},
+        );
+      }
+    });
+
+    // 3. Prepare/Request Endpoint
     appRouter.post('/api/prepare', (Request request) async {
       try {
         final bodyText = await request.readAsString();
@@ -98,6 +153,16 @@ class HttpServerService {
         }
         final totalBytes = files.fold<int>(0, (sum, f) => sum + f.size);
 
+        // Check for paired device auth token header
+        final pairAuthToken = request.headers['x-pair-auth-token'];
+        bool isPairedAndVerified = false;
+        if (pairAuthToken != null && pairingService != null) {
+          final pairedDevice = await pairingService!.storage.getPairedDevice(sender.id);
+          if (pairedDevice != null && pairedDevice.authToken == pairAuthToken) {
+            isPairedAndVerified = true;
+          }
+        }
+
         final progress = TransferProgress(
           transferId: transferId,
           senderDevice: sender,
@@ -110,7 +175,7 @@ class HttpServerService {
 
         final incoming = _IncomingTransfer(progress);
         _incomingTransfers[transferId] = incoming;
-        bool accepted = _isAutoAccept;
+        bool accepted = _isAutoAccept || isPairedAndVerified;
         try {
           if (!accepted && onTransferRequest != null) {
             accepted = await onTransferRequest!(progress);

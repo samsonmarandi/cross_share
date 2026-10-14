@@ -5,11 +5,13 @@ import '../../models/device_model.dart';
 
 class RadarDeviceView extends StatefulWidget {
   final List<DeviceModel> devices;
+  final List<String> pairedDeviceIds;
   final ValueChanged<DeviceModel> onDeviceSelected;
 
   const RadarDeviceView({
     super.key,
     required this.devices,
+    this.pairedDeviceIds = const [],
     required this.onDeviceSelected,
   });
 
@@ -38,16 +40,18 @@ class _RadarDeviceViewState extends State<RadarDeviceView>
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = min(constraints.maxWidth, constraints.maxHeight);
         final center = Offset(constraints.maxWidth / 2, constraints.maxHeight / 2);
-        final radius = size / 2 - 40;
+        final radius = max(size / 2 - 50, 80.0);
 
         return Stack(
           alignment: Alignment.center,
           children: [
-            // Radar Background Rings
+            // Animated Radar Rings Background
             AnimatedBuilder(
               animation: _controller,
               builder: (context, child) {
@@ -56,40 +60,52 @@ class _RadarDeviceViewState extends State<RadarDeviceView>
                   painter: _RadarPainter(
                     animationValue: _controller.value,
                     maxRadius: radius,
+                    primaryColor: primaryColor,
                   ),
                 );
               },
             ),
 
-            // Center Self Icon
+            // Center Self Device Beacon
             Container(
-              width: 60,
-              height: 60,
+              width: 64,
+              height: 64,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
+                color: primaryColor,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-                    blurRadius: 15,
-                    spreadRadius: 3,
+                    color: primaryColor.withValues(alpha: 0.4),
+                    blurRadius: 20,
+                    spreadRadius: 4,
                   ),
                 ],
               ),
-              child: const Icon(Icons.cell_tower, color: Colors.white, size: 30),
+              child: const Icon(
+                Icons.wifi_tethering_rounded,
+                color: Colors.white,
+                size: 32,
+              ),
             ),
 
-            // Positioned Nearby Discovered Devices
+            // Searching Status Indicator (Positioned safely above bottom tray)
             if (widget.devices.isEmpty)
               Positioned(
-                bottom: 20,
+                bottom: 85,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(20),
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       SizedBox(
@@ -97,75 +113,120 @@ class _RadarDeviceViewState extends State<RadarDeviceView>
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: primaryColor,
                         ),
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Text(
                         'Searching for nearby devices on LAN...',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
 
+            // Discovered Nearby Devices
             ...List.generate(widget.devices.length, (index) {
               final device = widget.devices[index];
-              // Position devices in a circular layout
+              final isPaired = widget.pairedDeviceIds.contains(device.id);
               final angle = (2 * pi / widget.devices.length) * index - (pi / 2);
-              final dist = radius * 0.7;
-              final x = center.dx + dist * cos(angle) - 35;
-              final y = center.dy + dist * sin(angle) - 45;
+              final dist = radius * 0.72;
+              final x = center.dx + dist * cos(angle) - 32;
+              final y = center.dy + dist * sin(angle) - 40;
 
               return Positioned(
                 left: x,
                 top: y,
-                child: GestureDetector(
+                child: InkWell(
                   onTap: () => widget.onDeviceSelected(device),
+                  borderRadius: BorderRadius.circular(30),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.secondaryContainer,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Theme.of(context).colorScheme.primary,
-                            width: 2,
+                      Stack(
+                        children: [
+                          Container(
+                            width: 58,
+                            height: 58,
+                            decoration: BoxDecoration(
+                              color: isPaired
+                                  ? Theme.of(context).colorScheme.primaryContainer
+                                  : Theme.of(context).colorScheme.surfaceContainerHigh,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isPaired ? Colors.green : primaryColor,
+                                width: 2.5,
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Icon(
+                              _getDeviceIcon(device.deviceType),
+                              color: isPaired ? Colors.green.shade700 : primaryColor,
+                              size: 28,
+                            ),
                           ),
+                          if (isPaired)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: const BoxDecoration(
+                                  color: Colors.green,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.link_rounded,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(10),
                           boxShadow: const [
                             BoxShadow(
-                              color: Colors.black26,
-                              blurRadius: 8,
-                              offset: Offset(0, 4),
+                              color: Colors.black12,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
                             ),
                           ],
                         ),
-                        child: Icon(
-                          _getDeviceIcon(device.deviceType),
-                          color: Theme.of(context).colorScheme.onSecondaryContainer,
-                          size: 26,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          device.alias,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isPaired) ...[
+                              const Icon(Icons.check_circle, color: Colors.green, size: 10),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              device.alias,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -182,18 +243,18 @@ class _RadarDeviceViewState extends State<RadarDeviceView>
   IconData _getDeviceIcon(String deviceType) {
     switch (deviceType.toLowerCase()) {
       case 'android':
-        return Icons.phone_android;
+        return Icons.phone_android_rounded;
       case 'ios':
-        return Icons.phone_iphone;
+        return Icons.phone_iphone_rounded;
       case 'macos':
       case 'windows':
       case 'linux':
       case 'desktop':
-        return Icons.laptop;
+        return Icons.laptop_rounded;
       case 'web':
-        return Icons.language;
+        return Icons.language_rounded;
       default:
-        return Icons.devices;
+        return Icons.devices_rounded;
     }
   }
 }
@@ -201,26 +262,31 @@ class _RadarDeviceViewState extends State<RadarDeviceView>
 class _RadarPainter extends CustomPainter {
   final double animationValue;
   final double maxRadius;
+  final Color primaryColor;
 
-  _RadarPainter({required this.animationValue, required this.maxRadius});
+  _RadarPainter({
+    required this.animationValue,
+    required this.maxRadius,
+    required this.primaryColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final paint = Paint()
-      ..color = Colors.blue.withValues(alpha: 0.15)
+      ..color = primaryColor.withValues(alpha: 0.12)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
 
-    // Draw static concentric circles
+    // Draw static concentric radar rings
     for (int i = 1; i <= 3; i++) {
       canvas.drawCircle(center, maxRadius * (i / 3), paint);
     }
 
-    // Draw pulsating expanding circle
+    // Draw pulsating radar wave
     final pulseRadius = maxRadius * animationValue;
     final pulsePaint = Paint()
-      ..color = Colors.blue.withValues(alpha: 0.3 * (1 - animationValue))
+      ..color = primaryColor.withValues(alpha: 0.25 * (1 - animationValue))
       ..style = PaintingStyle.fill;
 
     canvas.drawCircle(center, pulseRadius, pulsePaint);

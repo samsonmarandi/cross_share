@@ -82,22 +82,39 @@ class AppSession {
   }
 
   Future<void> sendSelectedFiles(DeviceModel receiver) async {
-    final result = await _ref
-        .read(transferEngineProvider)
-        .sendFiles(
-          sender: _ref.read(currentDeviceProvider),
-          receiver: receiver,
-          files: List.of(_ref.read(selectedFilesProvider)),
-          onProgress: (progress) {
-            if (!_disposed) {
-              _ref
-                  .read(activeTransferProvider.notifier)
-                  .updateProgress(progress);
-            }
-          },
-        );
-    if (!_disposed) {
-      _ref.read(transferHistoryProvider.notifier).addTransfer(result);
+    await sendSelectedFilesToMultiple([receiver]);
+  }
+
+  Future<List<TransferProgress>> sendSelectedFilesToMultiple(
+    List<DeviceModel> receivers,
+  ) async {
+    final results = <TransferProgress>[];
+    for (final receiver in receivers) {
+      if (_disposed) break;
+      final storage = _ref.read(encryptedPairingStorageProvider);
+      final pairedDevice = await storage.getPairedDevice(receiver.id);
+      final pairAuthToken = pairedDevice?.authToken;
+
+      final result = await _ref
+          .read(transferEngineProvider)
+          .sendFiles(
+            sender: _ref.read(currentDeviceProvider),
+            receiver: receiver,
+            files: List.of(_ref.read(selectedFilesProvider)),
+            pairAuthToken: pairAuthToken,
+            onProgress: (progress) {
+              if (!_disposed) {
+                _ref
+                    .read(activeTransferProvider.notifier)
+                    .updateProgress(progress);
+              }
+            },
+          );
+      if (!_disposed) {
+        _ref.read(transferHistoryProvider.notifier).addTransfer(result);
+        results.add(result);
+      }
     }
+    return results;
   }
 }

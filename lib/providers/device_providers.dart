@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/device_model.dart';
+import '../models/paired_device_model.dart';
+import '../services/encrypted_pairing_storage.dart';
 import '../services/network_info_service.dart';
 import 'service_providers.dart';
 
@@ -75,5 +77,41 @@ class CurrentDeviceNotifier extends StateNotifier<DeviceModel> {
 
   void setPort(int port) {
     state = state.copyWith(port: port);
+  }
+}
+
+// Reactive Paired Devices Riverpod State
+final pairedDevicesProvider =
+    StateNotifierProvider<PairedDevicesNotifier, List<PairedDeviceModel>>((ref) {
+      final storage = ref.watch(encryptedPairingStorageProvider);
+      return PairedDevicesNotifier(storage);
+    });
+
+class PairedDevicesNotifier extends StateNotifier<List<PairedDeviceModel>> {
+  final EncryptedPairingStorage _storage;
+
+  PairedDevicesNotifier(this._storage) : super([]) {
+    loadDevices();
+  }
+
+  Future<void> loadDevices() async {
+    final list = await _storage.loadPairedDevices();
+    if (mounted) {
+      state = list;
+    }
+  }
+
+  Future<void> addPairedDevice(PairedDeviceModel device) async {
+    await _storage.savePairedDevice(device);
+    await loadDevices();
+  }
+
+  Future<void> removePairedDevice(String deviceId) async {
+    await _storage.removePairedDevice(deviceId);
+    await loadDevices();
+  }
+
+  bool isPaired(String deviceId) {
+    return state.any((d) => d.id == deviceId);
   }
 }

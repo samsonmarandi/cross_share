@@ -3,12 +3,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mime/mime.dart';
-import '../../utils/file_metadata.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/device_model.dart';
 import '../../models/share_file_model.dart';
 import '../../providers/app_providers.dart';
+import '../../utils/file_metadata.dart';
+import '../widgets/device_picker_dialog.dart';
+import '../widgets/pairing_dialog.dart';
 import '../widgets/radar_device_view.dart';
 import '../widgets/transfer_dialog.dart';
 
@@ -27,7 +29,6 @@ class _SendTabState extends ConsumerState<SendTab> {
       FileType pickerType = type;
       List<String>? allowedExtensions;
 
-      // On macOS & desktop platforms, FileType.image or FileType.video require explicit allowedExtensions
       if (type == FileType.image) {
         pickerType = FileType.custom;
         allowedExtensions = [
@@ -101,6 +102,9 @@ class _SendTabState extends ConsumerState<SendTab> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Text('Share Text / Clipboard'),
           content: TextField(
             controller: controller,
@@ -137,6 +141,214 @@ class _SendTabState extends ConsumerState<SendTab> {
               child: const Text('Add Text'),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  void _showAddFilesBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Add Content to Share',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildPickerItem(
+                      icon: Icons.folder_rounded,
+                      color: Colors.blue,
+                      label: 'Files',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _pickFiles(FileType.any);
+                      },
+                    ),
+                    _buildPickerItem(
+                      icon: Icons.image_rounded,
+                      color: Colors.purple,
+                      label: 'Photos',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _pickFiles(FileType.image);
+                      },
+                    ),
+                    _buildPickerItem(
+                      icon: Icons.videocam_rounded,
+                      color: Colors.redAccent,
+                      label: 'Videos',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _pickFiles(FileType.video);
+                      },
+                    ),
+                    _buildPickerItem(
+                      icon: Icons.notes_rounded,
+                      color: Colors.amber.shade800,
+                      label: 'Text',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _addTextSnippet();
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSelectedFilesModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Consumer(
+          builder: (context, ref, child) {
+            final files = ref.watch(selectedFilesProvider);
+            final totalSize = files.fold<int>(0, (sum, f) => sum + f.size);
+
+            if (files.isEmpty) {
+              return SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.folder_open_rounded, size: 48, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      const Text('No files selected yet'),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showAddFilesBottomSheet();
+                        },
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Files'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.5,
+              maxChildSize: 0.85,
+              minChildSize: 0.3,
+              builder: (context, scrollController) {
+                return Column(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 12, bottom: 8),
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade400,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Selected Files (${files.length})',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          TextButton.icon(
+                            icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+                            label: const Text('Clear All'),
+                            onPressed: () {
+                              ref.read(selectedFilesProvider.notifier).clear();
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Total size: ${formatBytes(totalSize)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).colorScheme.outline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 20),
+                    Expanded(
+                      child: ListView.builder(
+                        controller: scrollController,
+                        itemCount: files.length,
+                        itemBuilder: (context, index) {
+                          final file = files[index];
+                          return ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primaryContainer,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                _getFileIcon(file.fileType),
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            title: Text(
+                              file.fileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            subtitle: Text(file.formattedSize),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.close_rounded, size: 20),
+                              onPressed: () {
+                                ref
+                                    .read(selectedFilesProvider.notifier)
+                                    .removeFile(file.id);
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -212,7 +424,7 @@ class _SendTabState extends ConsumerState<SendTab> {
                             final device = await discovery.connectToIp(ip);
                             navigator.pop();
                             if (device != null) {
-                              _showDeviceConnectPrompt(device);
+                              _handleDeviceSelection(device);
                             } else {
                               messenger.showSnackBar(
                                 const SnackBar(
@@ -233,6 +445,23 @@ class _SendTabState extends ConsumerState<SendTab> {
         );
       },
     );
+  }
+
+  void _handleDeviceSelection(DeviceModel device) {
+    final pairedDevices = ref.read(pairedDevicesProvider);
+    final isPaired = pairedDevices.any((d) => d.id == device.id);
+
+    if (isPaired) {
+      ref.read(connectedDeviceProvider.notifier).state = device;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connected to paired device ${device.alias}!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      _showDeviceConnectPrompt(device);
+    }
   }
 
   void _showDeviceConnectPrompt(DeviceModel device) {
@@ -284,6 +513,20 @@ class _SendTabState extends ConsumerState<SendTab> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel'),
             ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.phonelink_lock_rounded, size: 16),
+              label: const Text('Pair Device'),
+              onPressed: () async {
+                Navigator.pop(context);
+                final paired = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => PairingDialog(initialTargetDevice: device),
+                );
+                if (paired == true && mounted) {
+                  ref.read(connectedDeviceProvider.notifier).state = device;
+                }
+              },
+            ),
             ElevatedButton(
               onPressed: () {
                 ref.read(connectedDeviceProvider.notifier).state = device;
@@ -291,7 +534,7 @@ class _SendTabState extends ConsumerState<SendTab> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Connected to ${device.alias}! You can now select files and transfer.',
+                      'Connected to ${device.alias}! Ready to transfer.',
                     ),
                   ),
                 );
@@ -311,23 +554,61 @@ class _SendTabState extends ConsumerState<SendTab> {
     );
   }
 
-  IconData _getOsIcon(String deviceType) {
-    switch (deviceType.toLowerCase()) {
-      case 'android':
-        return Icons.phone_android;
-      case 'ios':
-        return Icons.phone_iphone;
-      case 'macos':
-      case 'windows':
-      case 'linux':
-      case 'desktop':
-        return Icons.laptop;
-      default:
-        return Icons.devices;
+  Future<void> _showDevicePickerAndSend() async {
+    final connectedDevice = ref.read(connectedDeviceProvider);
+    final selectedDevices = await showDialog<List<DeviceModel>>(
+      context: context,
+      builder: (context) => DevicePickerDialog(preselectedDevice: connectedDevice),
+    );
+
+    if (selectedDevices != null && selectedDevices.isNotEmpty) {
+      _startBatchTransfer(selectedDevices);
     }
   }
 
-  Future<void> _startTransferToDevice(DeviceModel targetDevice) async {
+  Future<void> _sendToAllDevices() async {
+    final discoveredDevices = ref.read(discoveredDevicesProvider).value ?? [];
+    if (discoveredDevices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No active devices found on local network.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send to All Devices'),
+        content: Text(
+          'Send selected file(s) to all ${discoveredDevices.length} active device(s) on your local network?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.hub_rounded, size: 18),
+            label: const Text('Send to All'),
+            onPressed: () => Navigator.pop(context, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _startBatchTransfer(discoveredDevices);
+    }
+  }
+
+  Future<void> _startBatchTransfer(List<DeviceModel> targetDevices) async {
     final selectedFiles = ref.read(selectedFilesProvider);
     if (selectedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -361,307 +642,62 @@ class _SendTabState extends ConsumerState<SendTab> {
       },
     );
 
-    await ref.read(sessionProvider).sendSelectedFiles(targetDevice);
+    await ref.read(sessionProvider).sendSelectedFilesToMultiple(targetDevices);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final selectedFiles = ref.watch(selectedFilesProvider);
-    final connectedDevice = ref.watch(connectedDeviceProvider);
-    final discoveredDevicesAsync = ref.watch(discoveredDevicesProvider);
-
-    final totalSize = selectedFiles.fold<int>(0, (sum, f) => sum + f.size);
-
-    return Scaffold(
-      body: Column(
-        children: [
-          // Connected Target Banner
-          if (connectedDevice != null) ...[
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 1.5,
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.circle, color: Colors.green, size: 14),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Connected Target: ${connectedDevice.alias}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          'IP: ${connectedDevice.ip}:${connectedDevice.port}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    tooltip: 'Disconnect Target',
-                    onPressed: () {
-                      ref.read(connectedDeviceProvider.notifier).state = null;
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // File Picker Action Bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildPickerButton(
-                  icon: Icons.folder,
-                  label: 'Files',
-                  onTap: () => _pickFiles(FileType.any),
-                ),
-                _buildPickerButton(
-                  icon: Icons.image,
-                  label: 'Photos',
-                  onTap: () => _pickFiles(FileType.image),
-                ),
-                _buildPickerButton(
-                  icon: Icons.videocam,
-                  label: 'Videos',
-                  onTap: () => _pickFiles(FileType.video),
-                ),
-                _buildPickerButton(
-                  icon: Icons.notes,
-                  label: 'Text',
-                  onTap: _addTextSnippet,
-                ),
-              ],
-            ),
-          ),
-
-          // Selected Files List
-          if (selectedFiles.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Theme.of(context).colorScheme.surfaceContainer,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Selected Files (${selectedFiles.length}) - ${formatBytes(totalSize)}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        ref.read(selectedFilesProvider.notifier).clear(),
-                    child: const Text('Clear All'),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(
-              height: 90,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: selectedFiles.length,
-                itemBuilder: (context, index) {
-                  final file = selectedFiles[index];
-                  return Container(
-                    width: 140,
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 6,
-                    ),
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Stack(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(_getFileIcon(file.fileType), size: 24),
-                            const Spacer(),
-                            Text(
-                              file.fileName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              file.formattedSize,
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Positioned(
-                          top: -8,
-                          right: -8,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.cancel,
-                              size: 18,
-                              color: Colors.grey,
-                            ),
-                            onPressed: () => ref
-                                .read(selectedFilesProvider.notifier)
-                                .removeFile(file.id),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Separate Transfer Button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.send),
-                  label: Text(
-                    connectedDevice != null
-                        ? 'Transfer ${selectedFiles.length} File(s) to ${connectedDevice.alias}'
-                        : 'Select a Connected Device on Radar to Transfer',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () {
-                    if (connectedDevice == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Please tap a device on the radar to connect first.',
-                          ),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                    } else {
-                      _startTransferToDevice(connectedDevice);
-                    }
-                  },
-                ),
-              ),
-            ),
-            const Divider(height: 1),
-          ],
-
-          // Direct Connect & Subnet Scan Action Bar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.lan, size: 18),
-                    label: const Text('Connect via IP'),
-                    onPressed: _showConnectByIpDialog,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.sync, size: 18),
-                  label: const Text('Scan Subnet'),
-                  onPressed: () async {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Sweeping local network subnet for active devices...',
-                        ),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    await ref.read(discoveryServiceProvider).scanLocalSubnet();
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          // Radar Devices View
-          Expanded(
-            child: discoveredDevicesAsync.when(
-              data: (devices) {
-                return RadarDeviceView(
-                  devices: devices,
-                  onDeviceSelected: (device) =>
-                      _showDeviceConnectPrompt(device),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => RadarDeviceView(
-                devices: const [],
-                onDeviceSelected: (device) => _showDeviceConnectPrompt(device),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  IconData _getOsIcon(String deviceType) {
+    switch (deviceType.toLowerCase()) {
+      case 'android':
+        return Icons.phone_android_rounded;
+      case 'ios':
+        return Icons.phone_iphone_rounded;
+      case 'macos':
+      case 'windows':
+      case 'linux':
+      case 'desktop':
+        return Icons.laptop_rounded;
+      default:
+        return Icons.devices_rounded;
+    }
   }
 
-  Widget _buildPickerButton({
+  IconData _getFileIcon(String fileType) {
+    switch (fileType) {
+      case 'image':
+        return Icons.image_rounded;
+      case 'video':
+        return Icons.movie_rounded;
+      case 'audio':
+        return Icons.audiotrack_rounded;
+      case 'apk':
+        return Icons.android_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
+  }
+
+  Widget _buildPickerItem({
     required IconData icon,
+    required Color color,
     required String label,
     required VoidCallback onTap,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.all(12),
         child: Column(
           children: [
             CircleAvatar(
-              radius: 22,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+              radius: 26,
+              backgroundColor: color.withValues(alpha: 0.15),
+              child: Icon(icon, color: color, size: 28),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               label,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -669,18 +705,299 @@ class _SendTabState extends ConsumerState<SendTab> {
     );
   }
 
-  IconData _getFileIcon(String fileType) {
-    switch (fileType) {
-      case 'image':
-        return Icons.image;
-      case 'video':
-        return Icons.movie;
-      case 'audio':
-        return Icons.audiotrack;
-      case 'apk':
-        return Icons.android;
-      default:
-        return Icons.insert_drive_file;
-    }
+  @override
+  Widget build(BuildContext context) {
+    final selectedFiles = ref.watch(selectedFilesProvider);
+    final connectedDevice = ref.watch(connectedDeviceProvider);
+    final discoveredDevicesAsync = ref.watch(discoveredDevicesProvider);
+    final pairedDevices = ref.watch(pairedDevicesProvider);
+
+    final totalSize = selectedFiles.fold<int>(0, (sum, f) => sum + f.size);
+    final pairedIds = pairedDevices.map((d) => d.id).toList();
+
+    // Auto-connect to a discovered paired device if not connected yet
+    discoveredDevicesAsync.whenData((devices) {
+      if (connectedDevice == null) {
+        final pairedMatch = devices.where((d) => pairedIds.contains(d.id));
+        if (pairedMatch.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && ref.read(connectedDeviceProvider) == null) {
+              ref.read(connectedDeviceProvider.notifier).state = pairedMatch.first;
+            }
+          });
+        }
+      }
+    });
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          // Background Hero Radar Canvas
+          Positioned.fill(
+            child: discoveredDevicesAsync.when(
+              data: (devices) {
+                return RadarDeviceView(
+                  devices: devices,
+                  pairedDeviceIds: pairedIds,
+                  onDeviceSelected: (device) => _handleDeviceSelection(device),
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (err, stack) => RadarDeviceView(
+                devices: const [],
+                pairedDeviceIds: pairedIds,
+                onDeviceSelected: (device) => _handleDeviceSelection(device),
+              ),
+            ),
+          ),
+
+          // Top Floating Bar (Connected Target & IP Connect)
+          Positioned(
+            top: 12,
+            left: 16,
+            right: 16,
+            child: Row(
+              children: [
+                if (connectedDevice != null) ...[
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 10,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            pairedIds.contains(connectedDevice.id)
+                                ? Icons.link_rounded
+                                : Icons.circle,
+                            color: Colors.green,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Target: ${connectedDevice.alias}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              ref
+                                  .read(connectedDeviceProvider.notifier)
+                                  .state = null;
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.only(left: 6),
+                              child: Icon(Icons.cancel_rounded, size: 18),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ] else ...[
+                  const Spacer(),
+                ],
+
+                // IP Connect Action Button
+                Material(
+                  color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                  elevation: 3,
+                  borderRadius: BorderRadius.circular(30),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(30),
+                    onTap: _showConnectByIpDialog,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 9,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lan_rounded, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'IP Connect',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Bottom Floating Controls (Selected Files Tray & Add Content FAB)
+          Positioned(
+            bottom: 16,
+            left: 16,
+            right: 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (selectedFiles.isNotEmpty) ...[
+                  // Floating Selected Files Tray
+                  Card(
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: _showSelectedFilesModal,
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    '${selectedFiles.length}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      'Files Ready',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    Text(
+                                      formatBytes(totalSize),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outline,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 6),
+                                const Icon(
+                                  Icons.keyboard_arrow_up_rounded,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Spacer(),
+
+                          // Add More Button
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline_rounded),
+                            tooltip: 'Add More Files',
+                            onPressed: _showAddFilesBottomSheet,
+                          ),
+
+                          const SizedBox(width: 4),
+
+                          // Send To... Button
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                            ),
+                            icon: const Icon(Icons.devices_rounded, size: 16),
+                            label: const Text('Send To...'),
+                            onPressed: _showDevicePickerAndSend,
+                          ),
+
+                          const SizedBox(width: 6),
+
+                          // Send to All Button
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                            ),
+                            icon: const Icon(Icons.hub_rounded, size: 16),
+                            label: const Text('Send to All'),
+                            onPressed: _sendToAllDevices,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ] else ...[
+                  // Floating Add Content Action Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FloatingActionButton.extended(
+                        heroTag: 'add_files_fab',
+                        onPressed: _showAddFilesBottomSheet,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('Add Content'),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -26,6 +26,7 @@ class TransferEngine {
     required DeviceModel receiver,
     required List<ShareFileModel> files,
     required void Function(TransferProgress progress) onProgress,
+    String? pairAuthToken,
   }) async {
     final transferId = _uuid.v4();
     final totalBytes = files.fold<int>(0, (sum, f) => sum + f.size);
@@ -73,10 +74,18 @@ class TransferEngine {
       // Step 1: Handshake & Prepare Request
       final prepareUrl =
           'http://${targetReceiver.ip}:${targetReceiver.port}/api/prepare';
+
+      final prepareHeaders = <String, String>{
+        'content-type': 'application/json',
+      };
+      if (pairAuthToken != null && pairAuthToken.isNotEmpty) {
+        prepareHeaders['x-pair-auth-token'] = pairAuthToken;
+      }
+
       final prepareResponse = await http
           .post(
             Uri.parse(prepareUrl),
-            headers: {'content-type': 'application/json'},
+            headers: prepareHeaders,
             body: jsonEncode({
               'transferId': transferId,
               'sender': sender.toJson(),
