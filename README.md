@@ -1,46 +1,73 @@
 # CrossShare
 
-A Flutter application for sharing files and text over a local network. Native devices discover peers using UDP announcements and an HTTP subnet scan. A native host also serves a browser download portal.
+A fast, cross-platform local network file sharing application built with Flutter. CrossShare allows devices on the same Wi-Fi or LAN to discover each other and transfer files or text snippets instantly, serving as an open ecosystem alternative to AirDrop.
 
-## Architecture
+![Platforms: Android | iOS | macOS | Windows | Linux](https://img.shields.io/badge/Platforms-Android%20%7C%20iOS%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-blue)
 
-The existing layered structure fits the size of this application. Keep dependencies flowing from presentation to application coordination to services and models:
+## Features
 
-- `lib/main.dart`: Flutter initialization and the Riverpod scope.
-- `lib/app.dart`: app configuration, themes, and the home screen.
-- `lib/ui/screens/` and `lib/ui/widgets/`: rendering, navigation, dialogs, and platform picker interaction.
-- `lib/providers/session_provider.dart`: `AppSession`, which starts networking, synchronizes settings, and coordinates transfer state and history.
-- `lib/providers/device_providers.dart`: current device identity and network information.
-- `lib/providers/transfer_providers.dart`: selections, connected peer, active progress, and history.
-- `lib/providers/settings_providers.dart`: user settings.
-- `lib/providers/service_providers.dart`: service construction, dependency injection, discovery stream, and resource disposal.
-- `lib/providers/app_providers.dart`: public exports for existing UI imports.
-- `lib/services/`: UDP discovery, HTTP receiver, outgoing transfer engine, network information, and isolated browser portal markup.
-- `lib/models/`: device, file, and transfer data.
-- `lib/utils/file_metadata.dart`: shared file categories and byte formatting.
+- 📡 **Radar Discovery**: Automatically sweep the local subnet via UDP and HTTP to discover nearby active devices on an interactive radar canvas.
+- 🔐 **Encrypted Device Pairing**: Exchange a 6-digit PIN to securely pair devices. Trusted devices save AES-encrypted auth tokens locally, enabling seamless background transfers without manual approval popups.
+- 🚀 **Multi-Device Batch Transfers**: Use "Send To..." to pick specific target devices, or "Send to All" to instantly broadcast files to every active device on the network simultaneously.
+- 🌐 **Browser Web Portal**: Generate a QR code and local IP link to allow any device with a web browser (Smart TVs, legacy PCs, iPhones) to download files without installing the app.
 
-Widgets update provider state. `AppSession` synchronizes that state with services; avoid updating both a provider and a service in the same UI handler. Services never depend on widgets or Riverpod. Inject services through provider overrides when testing. ProviderScope owns sockets, timers, discovery streams, and the outgoing HTTP client.
+---
 
-Startup resolves device information, starts the receiver, publishes the actual bound port, then starts discovery. `HomeScreen` supplies the incoming approval dialog and displays startup errors. Received files require an approved preparation request; progress covers the entire batch, and history contains the received local paths. A receiver accepts one incoming batch at a time. An approved batch with no upload activity expires after two minutes; an upload in progress has no idle expiry.
+## Screenshots
 
-## Validation
+<details>
+<summary>Click to view screenshots (Add your images here)</summary>
 
+| Radar & Discovery | Send to All & Device Picker |
+| :---: | :---: |
+| `![Radar UI Placeholder](assets/screenshots/radar_ui.png)` | `![Device Picker Placeholder](assets/screenshots/device_picker.png)` |
+
+| Encrypted Pairing & Settings | Web Portal QR Code |
+| :---: | :---: |
+| `![Settings Placeholder](assets/screenshots/pairing_settings.png)` | `![Web Portal Placeholder](assets/screenshots/web_portal.png)` |
+
+</details>
+
+---
+
+## How to Run & Build
+
+### Prerequisites
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) (`^3.12.2` or newer).
+
+### Running locally
+1. Clone the repository and fetch dependencies:
+   ```sh
+   flutter pub get
+   ```
+2. Run on a connected physical device or desktop simulator:
+   ```sh
+   flutter run
+   ```
+   *(To specify a target device, use `flutter run -d <device_id>`)*
+
+### Running Tests
+To run unit and integration tests (validating the transfer engine and encrypted pairing storage):
 ```sh
-flutter pub get
-flutter analyze
 flutter test
 ```
 
-The widget test overrides `AppSession` to avoid plugins and LAN scans. Service regression tests bind an ephemeral local HTTP port and use a temporary download directory. They cover UTF-8 text batches, aggregate completion, unapproved uploads, and missing source files.
+---
 
-## Current boundaries
+## Architecture Overview
 
-- Settings, device identity, and history live in memory and reset on restart.
-- Native networking uses `dart:io`; the generated Flutter web target is not a supported sending/receiving client. Browser access uses a native device's `/web` portal.
-- Subnet scan fallback assumes IPv4 `/24` and probes port 53317. UDP announcements advertise a receiver's dynamically assigned port.
-- Transfers use plain LAN HTTP without peer authentication or encryption. The prepare step controls acceptance but does not authenticate a peer.
-- Cancellation of an outgoing upload is supported; the prepare HTTP request is not cancellable. Receiver abandonment is cleared by its idle timeout.
-- Interrupted uploads can leave partial files, and receiving an existing filename overwrites it. Resumable transfers and collision handling need a separate design.
-- Mobile storage permissions, platform builds, and real transfers between devices still require testing on the intended devices.
+CrossShare is built using modern Flutter and Dart patterns:
 
-Add repositories for persisted settings/history when persistence is needed. A larger app may warrant feature folders, but extra interfaces and layers are unnecessary for the current scope.
+- **State Management**: Fully reactive state powered by `flutter_riverpod`.
+- **Networking (`dart:io`)**:
+  - `DiscoveryService`: Uses UDP multicasting and HTTP subnet sweeps to locate peers.
+  - `HttpServerService` & `TransferEngine`: Handle peer-to-peer file streams via a custom local HTTP server using `shelf` and `shelf_router`.
+- **Security (`crypto`)**:
+  - `EncryptedPairingStorage`: Device IDs and trusted auth tokens are encrypted on-disk using AES/SHA-256 derived keys ensuring your trusted devices remain secure.
+- **Project Structure**:
+  - `lib/ui/`: Contains the presentation layer (Screens, Widgets, Dialogs).
+  - `lib/services/`: Core logic (Networking, Web Portal HTTP Server, Encrypted Storage).
+  - `lib/providers/`: Riverpod state containers coordinating UI and Services.
+  - `lib/models/`: Strongly-typed data definitions.
+
+*Note: File transfers use plain LAN HTTP. Device pairing utilizes token-based authorization for auto-accepting transfers, but traffic interception protection relies on your local Wi-Fi network's WPA2/WPA3 encryption.*
