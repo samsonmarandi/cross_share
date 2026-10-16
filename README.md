@@ -15,16 +15,13 @@ A fast, cross-platform local network file sharing application built with Flutter
 
 ## Screenshots
 
-<details>
-<summary>Click to view screenshots (Add your images here)</summary>
+<details open>
+<summary>Click to view screenshots</summary>
 
-| Radar & Discovery | Send to All & Device Picker |
-| :---: | :---: |
-| `![Radar UI Placeholder](assets/screenshots/radar_ui.png)` | `![Device Picker Placeholder](assets/screenshots/device_picker.png)` |
+### Radar & Discovery
+![Radar UI](assets/screenshots/radar_ui.png)
 
-| Encrypted Pairing & Settings | Web Portal QR Code |
-| :---: | :---: |
-| `![Settings Placeholder](assets/screenshots/pairing_settings.png)` | `![Web Portal Placeholder](assets/screenshots/web_portal.png)` |
+*(More screenshots coming soon)*
 
 </details>
 
